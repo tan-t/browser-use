@@ -1,15 +1,24 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.staticfiles import StaticFiles
 import uuid
 import asyncio
 import aiosqlite
+import json
+import os
+import shutil
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 
 from browser_use.agent.service import Agent
+from browser_use.agent.views import AgentHistoryList
+from browser_use.browser.browser import Browser, BrowserConfig
 from langchain_openai import ChatOpenAI
 
 app = FastAPI()
+
+# Mount static files directory for serving GIFs
+app.mount("/gif_files", StaticFiles(directory="gif_files"), name="gif_files")
 
 # Initialize DB
 @app.on_event("startup")
@@ -37,7 +46,7 @@ class JobResponse(BaseModel):
 
 class JobStatus(BaseModel):
     status: str
-    result: Optional[str] = None
+    result: Optional[Union[Dict, str]] = None
     message: Optional[str] = None
 
 async def run_agent(job_id: str, prompt: str, step_count: int):
@@ -45,25 +54,47 @@ async def run_agent(job_id: str, prompt: str, step_count: int):
         # Create the LLM
         llm = ChatOpenAI(model="gpt-4o")
 
-        # Create the Agent
+        # Configure browser for headless mode
+        browser_config = BrowserConfig(headless=True)
+        browser = Browser(config=browser_config)
+
+        # Create the Agent with headless browser
         agent = Agent(
             task=prompt,
-            llm=llm
+            llm=llm,
+            browser=browser
         )
+
+        # Create gif_files directory if it doesn't exist
+        gif_dir = "gif_files"
+        os.makedirs(gif_dir, exist_ok=True)
 
         # Run the agent
         result = await agent.run(max_steps=step_count)
-        
-        # Convert result to string if it's not already
-        final_result = str(result) if result else "No result"
 
-        # Mark job complete in DB
+        # Generate and move GIF file
+        gif_filename = f"agent_history_{job_id}.gif"
+        agent.create_history_gif(output_path=gif_filename)
+        
+        # Move GIF to gif_files directory
+        gif_source = os.path.join(".", gif_filename)
+        gif_target = os.path.join(gif_dir, gif_filename)
+        if os.path.exists(gif_source):
+            shutil.move(gif_source, gif_target)
+        
+        # Convert result to JSON using model_dump()
+        if result:
+            final_result = result.model_dump()
+        else:
+            final_result = {"message": "No result"}
+
+        # Mark job complete in DB with JSON string
         async with aiosqlite.connect("jobs.db") as db:
             await db.execute("""
                 UPDATE jobs
                 SET status = ?, result = ?, updated_at = datetime('now')
                 WHERE job_id = ?
-            """, ("complete", final_result, job_id))
+            """, ("complete", json.dumps(final_result), job_id))
             await db.commit()
     except Exception as e:
         # Handle any errors during agent execution
@@ -113,7 +144,7 @@ async def get_job(job_id: str):
     if status == "complete":
         return JobStatus(
             status=status,
-            result=result
+            result=json.loads(result) if result else None
         )
     elif status == "failed":
         return JobStatus(
@@ -126,6 +157,16 @@ async def get_job(job_id: str):
             status=status,
             message="Agent is still running"
         )
+
+@app.get("/jobs/{job_id}/history_gif")
+async def get_history_gif(job_id: str):
+    gif_filename = f"agent_history_{job_id}.gif"
+    gif_path = os.path.join("gif_files", gif_filename)
+    
+    if not os.path.exists(gif_path):
+        raise HTTPException(status_code=404, detail="History GIF not found")
+    
+    return {"url": f"/gif_files/{gif_filename}"}
 
 if __name__ == "__main__":
     import uvicorn
