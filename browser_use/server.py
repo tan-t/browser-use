@@ -1,4 +1,5 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uuid
 import asyncio
@@ -14,6 +15,20 @@ from browser_use.agent.service import Agent
 from browser_use.agent.views import AgentHistoryList
 from browser_use.browser.browser import Browser, BrowserConfig
 from langchain_openai import ChatOpenAI
+
+def sanitize_agent_result(data: Any) -> None:
+    """
+    Recursively remove or nullify 'screenshot' fields from the model_dump() result
+    without modifying the underlying model or its model_dump() method.
+    """
+    if isinstance(data, dict):
+        if 'screenshot' in data:
+            data.pop('screenshot', None)
+        for v in data.values():
+            sanitize_agent_result(v)
+    elif isinstance(data, list):
+        for item in data:
+            sanitize_agent_result(item)
 
 app = FastAPI()
 
@@ -82,9 +97,10 @@ async def run_agent(job_id: str, prompt: str, step_count: int):
         if os.path.exists(gif_source):
             shutil.move(gif_source, gif_target)
         
-        # Convert result to JSON using model_dump()
+        # Convert result to JSON using model_dump() and sanitize it
         if result:
             final_result = result.model_dump()
+            sanitize_agent_result(final_result)
         else:
             final_result = {"message": "No result"}
 
@@ -166,7 +182,7 @@ async def get_history_gif(job_id: str):
     if not os.path.exists(gif_path):
         raise HTTPException(status_code=404, detail="History GIF not found")
     
-    return {"url": f"/gif_files/{gif_filename}"}
+    return FileResponse(path=gif_path, media_type="image/gif")
 
 if __name__ == "__main__":
     import uvicorn
