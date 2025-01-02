@@ -21,6 +21,6 @@ ENV PYTHONUNBUFFERED=1
 # Install Python dependencies
 COPY pyproject.toml README.md /app
 COPY ./browser_use /app/browser_use
-# RUN pip install browser-use
 RUN pip install . ."[dev]"
 RUN playwright install
+RUN mkdir /app/gif_files

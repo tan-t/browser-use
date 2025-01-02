@@ -5,7 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    volumes:
-      - ./:/app
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}  # Will use value from .env file or empty if not set
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - PORT=8000
+    ports:
+      - "8000:8000"
+    command: ["python", "/app/browser_use/server.py"]

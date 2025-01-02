@@ -225,6 +225,77 @@ hatch build
 
 Feel free to join the [Discord](https://link.browser-use.com/discord) for discussions and support.
 
+## Running as a Server
+
+You can run the agent as a server using Docker Compose:
+
+```bash
+docker compose up
+```
+
+This will start the server on port 8000. The server provides a REST API for running agents and managing jobs.
+
+### Server Configuration
+
+The server is configured to run on:
+- Host: 0.0.0.0
+- Port: Configurable via PORT environment variable (default: 8000)
+
+You can access the server at `http://localhost:8000` by default, or at your configured port.
+
+To use a different port:
+```bash
+# Using Docker Compose
+PORT=3000 docker compose up
+
+# Or modify docker-compose.yaml environment section:
+environment:
+  - PORT=3000
+```
+
+### API Endpoints
+
+#### Create Job
+```http
+POST /jobs
+```
+
+Request body:
+```json
+{
+    "prompt": "Your task prompt",
+    "step_count": 10
+}
+```
+
+Response:
+```json
+{
+    "job_id": "unique-job-id"
+}
+```
+
+#### Get Job Status
+```http
+GET /jobs/{job_id}
+```
+
+Response:
+```json
+{
+    "status": "completed|running|failed",
+    "result": "Job result data (when completed)",
+    "message": "Optional status message"
+}
+```
+
+#### Get History GIF
+```http
+GET /jobs/{job_id}/history_gif
+```
+
+Returns the agent's execution history as a GIF file (image/gif).
+
 ---
 
 <div align="center">
