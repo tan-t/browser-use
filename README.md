@@ -239,9 +239,19 @@ This will start the server on port 8000. The server provides a REST API for runn
 
 The server is configured to run on:
 - Host: 0.0.0.0
-- Port: 8000
+- Port: Configurable via PORT environment variable (default: 8000)
 
-You can access the server at `http://localhost:8000`
+You can access the server at `http://localhost:8000` by default, or at your configured port.
+
+To use a different port:
+```bash
+# Using Docker Compose
+PORT=3000 docker compose up
+
+# Or modify docker-compose.yaml environment section:
+environment:
+  - PORT=3000
+```
 
 ### API Endpoints
 
